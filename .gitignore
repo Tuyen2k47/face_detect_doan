@@ -1,0 +1,11 @@
+/video_data/
+/face_embeddings.npz
+/face_prototypes.npz
+/face_classifier.pkl
+/label_encoder.pkl
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
