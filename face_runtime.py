@@ -82,13 +82,46 @@ def create_face_app():
         return _build_app(cpu_providers)
 
     try:
-        return _build_app(["CUDAExecutionProvider", "CPUExecutionProvider"])
+        app = _build_app(["CUDAExecutionProvider", "CPUExecutionProvider"])
     except Exception as exc:
         if cuda_mode == "require":
             raise RuntimeError(f"Không thể khởi tạo InsightFace bằng CUDA: {exc}") from exc
         print(f"[WARN] Không thể khởi tạo InsightFace bằng CUDA: {exc}")
         print("[INFO] Fallback sang CPUExecutionProvider (sẽ chậm hơn).")
         return _build_app(cpu_providers)
+
+    cpu_models = _models_fallen_back_to_cpu(app)
+    if cpu_models:
+        message = (
+            f"Các model sau bị ONNX Runtime chuyển sang CPU khi chạy: {', '.join(cpu_models)}. "
+            "Thường do cuDNN quá mới so với onnxruntime-gpu; cài nvidia-cudnn-cu12==9.10.2.21."
+        )
+        if cuda_mode == "require":
+            raise RuntimeError(message)
+        print(f"[WARN] {message}")
+    return app
+
+
+def _models_fallen_back_to_cpu(app):
+    # ONNX Runtime chỉ phát hiện lỗi cuDNN ở lần chạy đầu và âm thầm chuyển session sang CPU,
+    # nên chạy thử mỗi model một lần với input giả để biết GPU có thật sự được dùng.
+    fallen_back = []
+    for name, model in app.models.items():
+        session = getattr(model, "session", None)
+        if session is None:
+            continue
+        model_input = session.get_inputs()[0]
+        shape = [
+            dim if isinstance(dim, int) else (1 if axis == 0 else 640)
+            for axis, dim in enumerate(model_input.shape)
+        ]
+        try:
+            session.run(None, {model_input.name: np.zeros(shape, dtype=np.float32)})
+        except Exception as exc:
+            print(f"[WARN] Chạy thử model {name} thất bại: {exc}")
+        if session.get_providers()[0] != "CUDAExecutionProvider":
+            fallen_back.append(name)
+    return fallen_back
 
 
 def normalized_embedding(face):

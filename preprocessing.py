@@ -4,8 +4,6 @@ import os
 import cv2
 import numpy as np
 
-from face_runtime import create_face_app, normalized_embedding
-
 
 VIDEO_DIR = "video_data"
 EMBEDDINGS_FILE = "face_embeddings.npz"
@@ -167,6 +165,9 @@ def face_passes_quality(face, frame):
 
 
 def extract_embeddings(videos):
+    # Import trễ để relabel.py dùng lại được các hàm ở đây mà không cần cài InsightFace.
+    from face_runtime import create_face_app, normalized_embedding
+
     app = create_face_app()
     embeddings = []
     labels = []
