@@ -13,7 +13,9 @@ MIN_DET_SCORE = 0.7
 MIN_FACE_SIDE = 80
 MIN_BLUR_VARIANCE = 40.0
 MAX_POSE_ANGLE = 35.0
-COSINE_THRESHOLD = 0.45
+# Hiệu chỉnh bằng calibrate_threshold.py: người lạ hết bị nhận nhầm từ 0.50; cộng 0.05
+# dự phòng vì frame realtime không qua bộ lọc chất lượng như frame dùng để hiệu chỉnh.
+COSINE_THRESHOLD = 0.55
 RANDOM_SEED = 42
 CACHE_VERSION = 2
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
