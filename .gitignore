@@ -11,3 +11,4 @@ venv/
 .env
 /logs/
 /preprocessing_log.txt
+/faceid_*.png
