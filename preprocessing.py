@@ -36,9 +36,10 @@ def infer_person_name(video_name):
             continue
         cleaned.append(token)
 
+    # Giữ toàn bộ họ tên (vd. nguyen_van_a) để hai người cùng họ không bị gộp nhãn.
     if cleaned:
-        return cleaned[0]
-    return tokens[0]
+        return "_".join(cleaned)
+    return "_".join(tokens)
 
 
 def organize_root_videos():

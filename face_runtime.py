@@ -33,47 +33,62 @@ def register_nvidia_dll_directories():
             try:
                 _CUDNN_DLL_HANDLES.append(ctypes.WinDLL(dll_path))
             except OSError as exc:
-                raise RuntimeError(f"Không nạp được thư viện cuDNN: {dll_path}: {exc}") from exc
+                print(f"[WARN] Không nạp được thư viện cuDNN: {dll_path}: {exc}")
 
     _DLL_DIRECTORIES_REGISTERED = True
 
 
+def _cuda_mode():
+    # INSIGHTFACE_USE_CUDA: "1" (mặc định) thử GPU rồi fallback CPU,
+    # "0" chỉ dùng CPU, "require" báo lỗi nếu không chạy được GPU.
+    value = os.environ.get("INSIGHTFACE_USE_CUDA", "1").strip().lower()
+    if value in {"0", "false", "no", "cpu"}:
+        return "off"
+    if value in {"require", "required", "force"}:
+        return "require"
+    return "auto"
+
+
+def _build_app(providers):
+    app = FaceAnalysis(name="buffalo_l", providers=providers)
+    app.prepare(ctx_id=0 if "CUDAExecutionProvider" in providers else -1, det_size=(640, 640))
+    print(f"[INFO] Đang dùng provider: {providers}")
+    return app
+
+
 def create_face_app():
-    register_nvidia_dll_directories()
-    preload_dlls = getattr(ort, "preload_dlls", None)
-    if callable(preload_dlls):
-        try:
-            preload_dlls()
-        except Exception as exc:
-            print(f"[WARN] Không nạp trước được DLL ONNX Runtime: {exc}")
+    cuda_mode = _cuda_mode()
+    if cuda_mode != "off":
+        register_nvidia_dll_directories()
+        preload_dlls = getattr(ort, "preload_dlls", None)
+        if callable(preload_dlls):
+            try:
+                preload_dlls()
+            except Exception as exc:
+                print(f"[WARN] Không nạp trước được DLL ONNX Runtime: {exc}")
 
     available_providers = ort.get_available_providers()
     print(f"[INFO] ONNX Runtime providers: {available_providers}")
 
-    providers = ["CPUExecutionProvider"]
-    use_cuda = os.environ.get("INSIGHTFACE_USE_CUDA", "1").strip().lower() not in {
-        "0",
-        "false",
-        "no",
-    }
-    if use_cuda and "CUDAExecutionProvider" not in available_providers:
-        raise RuntimeError("CUDAExecutionProvider không khả dụng trong ONNX Runtime.")
-    if use_cuda:
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    cpu_providers = ["CPUExecutionProvider"]
+    if cuda_mode == "off":
+        return _build_app(cpu_providers)
+
+    if "CUDAExecutionProvider" not in available_providers:
+        message = "CUDAExecutionProvider không khả dụng trong ONNX Runtime."
+        if cuda_mode == "require":
+            raise RuntimeError(message)
+        print(f"[WARN] {message} Fallback sang CPUExecutionProvider (sẽ chậm hơn).")
+        return _build_app(cpu_providers)
 
     try:
-        app = FaceAnalysis(name="buffalo_l", providers=providers)
-        app.prepare(ctx_id=0 if "CUDAExecutionProvider" in providers else -1, det_size=(640, 640))
-        print(f"[INFO] Đang dùng provider: {providers}")
-        return app
+        return _build_app(["CUDAExecutionProvider", "CPUExecutionProvider"])
     except Exception as exc:
-        if use_cuda:
+        if cuda_mode == "require":
             raise RuntimeError(f"Không thể khởi tạo InsightFace bằng CUDA: {exc}") from exc
-        print(f"[WARN] Không thể khởi tạo InsightFace với providers {providers}: {exc}")
-        print("[INFO] Fallback sang CPUExecutionProvider")
-        app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-        app.prepare(ctx_id=-1, det_size=(640, 640))
-        return app
+        print(f"[WARN] Không thể khởi tạo InsightFace bằng CUDA: {exc}")
+        print("[INFO] Fallback sang CPUExecutionProvider (sẽ chậm hơn).")
+        return _build_app(cpu_providers)
 
 
 def normalized_embedding(face):
