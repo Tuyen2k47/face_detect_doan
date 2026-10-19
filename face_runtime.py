@@ -49,14 +49,16 @@ def _cuda_mode():
     return "auto"
 
 
-def _build_app(providers):
-    app = FaceAnalysis(name="buffalo_l", providers=providers)
+def _build_app(providers, allowed_modules=None):
+    app = FaceAnalysis(name="buffalo_l", providers=providers, allowed_modules=allowed_modules)
     app.prepare(ctx_id=0 if "CUDAExecutionProvider" in providers else -1, det_size=(640, 640))
     print(f"[INFO] Đang dùng provider: {providers}")
     return app
 
 
-def create_face_app():
+def create_face_app(allowed_modules=None):
+    # allowed_modules=["detection", "recognition"] bỏ landmark/tuổi-giới tính để chạy nhanh hơn;
+    # khi đó face.pose là None nên bộ lọc góc nghiêng được bỏ qua.
     cuda_mode = _cuda_mode()
     if cuda_mode != "off":
         register_nvidia_dll_directories()
@@ -72,23 +74,23 @@ def create_face_app():
 
     cpu_providers = ["CPUExecutionProvider"]
     if cuda_mode == "off":
-        return _build_app(cpu_providers)
+        return _build_app(cpu_providers, allowed_modules)
 
     if "CUDAExecutionProvider" not in available_providers:
         message = "CUDAExecutionProvider không khả dụng trong ONNX Runtime."
         if cuda_mode == "require":
             raise RuntimeError(message)
         print(f"[WARN] {message} Fallback sang CPUExecutionProvider (sẽ chậm hơn).")
-        return _build_app(cpu_providers)
+        return _build_app(cpu_providers, allowed_modules)
 
     try:
-        app = _build_app(["CUDAExecutionProvider", "CPUExecutionProvider"])
+        app = _build_app(["CUDAExecutionProvider", "CPUExecutionProvider"], allowed_modules)
     except Exception as exc:
         if cuda_mode == "require":
             raise RuntimeError(f"Không thể khởi tạo InsightFace bằng CUDA: {exc}") from exc
         print(f"[WARN] Không thể khởi tạo InsightFace bằng CUDA: {exc}")
         print("[INFO] Fallback sang CPUExecutionProvider (sẽ chậm hơn).")
-        return _build_app(cpu_providers)
+        return _build_app(cpu_providers, allowed_modules)
 
     cpu_models = _models_fallen_back_to_cpu(app)
     if cpu_models:
